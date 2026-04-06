@@ -1,0 +1,75 @@
+name: metaboard-prod
+services:
+  metaboard-backend:
+    image: composer:2
+    working_dir: /var/www/html
+    volumes:
+      - ./metaboard-backend:/var/www/html
+    command: >
+      sh -lc "
+      composer install --no-interaction --prefer-dist &&
+      php artisan key:generate --force &&
+      php artisan serve --host=0.0.0.0 --port=8000
+      "
+    expose:
+      - "8000"
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: metaboard
+      DB_USERNAME: root
+      DB_PASSWORD: root
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+
+  metaboard-frontend:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - ./metaboard-frontend:/app
+    command: >
+      sh -lc "
+      npm install &&
+      npm run dev -- --host 0.0.0.0 --port 5173
+      "
+    expose:
+      - "5173"
+    depends_on:
+      - metaboard-backend
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - metaboard-frontend
+      - metaboard-backend
+    restart: unless-stopped
+
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: metaboard
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
+    
